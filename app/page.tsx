@@ -1,113 +1,205 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useRef, useState } from "react";
+
+import {
+  useRoom,
+  useLocalScreenShare,
+  useLocalVideo,
+  usePeerIds,
+  useLocalAudio,
+} from "@huddle01/react/hooks";
+import { Role } from "@huddle01/server-sdk/auth";
+
+import ShowPeers from "@/components/ShowPeers";
+import { createRoom } from "@/actions/createRoom";
+import { getAccessToken } from "@/actions/getAccessToken";
+
+const Page = () => {
+  const [roomId, setRoomId] = useState("");
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const screenRef = useRef<HTMLVideoElement>(null);
+
+  const { joinRoom, leaveRoom } = useRoom({
+    onJoin: () => {
+      console.log("Joined the room");
+    },
+    onLeave: () => {
+      setRoomId("");
+      console.log("Left the room");
+    },
+    onPeerJoin: (peer) => {
+      console.log("peer joined: ", peer);
+    },
+  });
+  const { stream, enableVideo, disableVideo, isVideoOn } = useLocalVideo();
+  const { enableAudio, disableAudio, isAudioOn } = useLocalAudio();
+  const { startScreenShare, stopScreenShare, shareStream } =
+    useLocalScreenShare();
+  const { peerIds } = usePeerIds();
+
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  useEffect(() => {
+    if (shareStream && screenRef.current) {
+      screenRef.current.srcObject = shareStream;
+    }
+  }, [shareStream]);
+
+  const getRoomId = async () => {
+    const roomIdentifier = await createRoom();
+    setRoomId(roomIdentifier as string);
+  };
+
+  const getAccessTokenData = async ({
+    roomId,
+    role,
+  }: {
+    roomId: string;
+    role: Role;
+  }) => {
+    const tokenData = await getAccessToken({ roomId, role });
+    return tokenData;
+  };
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="flex items-center justify-center mt-10">
+      <div className="flex flex-col w-1/4 items-center space-y-6 mx-10">
+        <input
+          onChange={(e) => {
+            setRoomId(e.target.value);
+          }}
+          value={roomId}
+          className="text-black mx-auto w-[300px] rounded-md p-2"
+        />
+        <div className="flex space-x-4 items-center">
+          <button
+            onClick={getRoomId}
+            type="button"
+            className="bg-blue-500 p-2 rounded-md"
           >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+            Get room id
+          </button>
+          <div className="bg-red-100 w-52 rounded-md">
+            <p className="text-center text-black p-2">Room id: {roomId}</p>
+          </div>
+        </div>
+        <div className="flex space-x-4 items-center">
+          <button
+            onClick={async () => {
+              const tokenData = await getAccessTokenData({
+                roomId,
+                role: Role.HOST,
+              });
+              joinRoom({
+                roomId: roomId,
+                token: tokenData,
+              });
+              console.log("Joined as Host");
+            }}
+            type="button"
+            className="bg-blue-500 p-2 rounded-md"
+          >
+            Join as Host
+          </button>
+          <button
+            onClick={async () => {
+              const tokenData = await getAccessTokenData({
+                roomId,
+                role: Role.GUEST,
+              });
+              joinRoom({
+                roomId: roomId,
+                token: tokenData,
+              });
+            }}
+            type="button"
+            className="bg-blue-500 p-2 rounded-md"
+          >
+            Join as Guest
+          </button>
+        </div>
+        <div className="flex space-x-4">
+          <button
+            type="button"
+            className="bg-blue-500 p-2 rounded-lg"
+            onClick={async () => {
+              isAudioOn ? await disableAudio() : await enableAudio();
+            }}
+          >
+            {isAudioOn ? "Disable" : "Enable"} Audio
+          </button>
+          <button
+            type="button"
+            className="bg-blue-500 p-2 rounded-md"
+            onClick={() => {
+              isVideoOn ? disableVideo() : enableVideo();
+            }}
+          >
+            Video {isVideoOn ? "Off" : "On"}
+          </button>
+          <button
+            type="button"
+            className="bg-blue-500 p-2 rounded-md"
+            onClick={() => {
+              shareStream ? stopScreenShare() : startScreenShare();
+            }}
+          >
+            Screen Share {shareStream ? "Off" : "On"}
+          </button>
+        </div>
+        <button
+          onClick={leaveRoom}
+          type="button"
+          className="bg-red-500 p-2 rounded-md"
+        >
+          Leave Room
+        </button>
+      </div>
+      <div className="w-full flex gap-4 justify-between items-stretch">
+        <div className="flex-1 justify-between items-center flex flex-col">
+          <div className="relative flex place-items-center before:absolute before:size-80 before:-translate-x-1/2  before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3  after:content-[''] before:lg:h-[360px]">
+            <div className="relative flex gap-2">
+              {isVideoOn ? (
+                <div className="w-1/2 mx-auto border-2 rounded-xl border-blue-400">
+                  <video
+                    ref={videoRef}
+                    className="aspect-video rounded-xl"
+                    autoPlay
+                    muted
+                  />
+                </div>
+              ) : (
+                <div className="size-[300px] flex items-center justify-center mx-auto border-2 rounded-xl border-blue-400">
+                  No videos turned on
+                </div>
+              )}
+              {shareStream && (
+                <div className="w-1/2 mx-auto border-2 rounded-xl border-blue-400">
+                  <video
+                    ref={screenRef}
+                    className="aspect-video rounded-xl"
+                    autoPlay
+                    muted
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 mb-10 grid gap-2 text-center">
+            {peerIds.map((peerId) =>
+              peerId ? <ShowPeers key={peerId} peerId={peerId} /> : null
+            )}
+          </div>
         </div>
       </div>
-
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+    </div>
   );
-}
+};
+
+export default Page;
